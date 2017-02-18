@@ -76,9 +76,9 @@ public class LeaseManager {
   //
   // Used for handling lock-leases
   // Mapping: leaseHolder -> Lease
-  //
+  //保存了租约持有者与租约的对应关系
   private final SortedMap<String, Lease> leases = new TreeMap<>();
-  // Set of: Lease
+  // Set of: Lease  使用优先级队列来保存租约
   private final PriorityQueue<Lease> sortedLeases = new PriorityQueue<>(512,
       new Comparator<Lease>() {
         @Override
@@ -87,6 +87,7 @@ public class LeaseManager {
         }
   });
   // INodeID -> Lease
+  // //保存了文件INode与租约的对应关系
   private final HashMap<Long, Lease> leasesById = new HashMap<>();
 
   private Daemon lmthread;
@@ -145,14 +146,22 @@ public class LeaseManager {
 
   /**
    * Adds (or re-adds) the lease for the specified file.
+   * @param holder :持有者
+   * @param inodeId :文件inode
    */
+  /*
+  * 当客户端创建文件 和追加文件 时，FSNamesystem.startFileInternal()以及appendFileInternaal()方法
+  * 都 会调用LeaseManager.addLease()为该客户端在HDFS文件上添加一个租约，同时Namenode读取fsimage文件时也需要在LeaseManager中添加
+  * 租约信息，以及在Namenode读取editlog时也需要在LeaseManager添加租约信息
+  * */
   synchronized Lease addLease(String holder, long inodeId) {
-    Lease lease = getLease(holder);
+    Lease lease = getLease(holder);    //构造租约
     if (lease == null) {
-      lease = new Lease(holder);
-      leases.put(holder, lease);
-      sortedLeases.add(lease);
+      lease = new Lease(holder);    //构造Lease对象
+      leases.put(holder, lease);    //将lease与持有者的对应关系添加到leases中·
+      sortedLeases.add(lease);     //将lease对象添加到sortleases中
     } else {
+      //如果租约不为空则更新租约时间
       renewLease(lease);
     }
     leasesById.put(inodeId, lease);
@@ -160,6 +169,11 @@ public class LeaseManager {
     return lease;
   }
 
+  /*
+  * 1. Namenoce关闭构建中的HDFS文件时，会调用FSNamesystem.finalizeINodeFileUnderConstruction()方法将INode从构建状态转换成非构建状态，
+  * 同时由于客户端已经完成了文件的写操作，所以需要从LeaseManager中删除该文件的租约
+  * 2. 在进行目录树的删除操作时，对于已经打开的文件，如果客户端从文件系统目录树中移出该HDFS文件，则会调用removerLeaseWithPrefixPath
+  * */
   synchronized void removeLease(long inodeId) {
     final Lease lease = leasesById.get(inodeId);
     if (lease != null) {
@@ -220,10 +234,20 @@ public class LeaseManager {
 
   /**
    * Renew the lease(s) held by the given client
+   * 当客户端打开一个文件或者追加写操作时，LeaseManager会保存这个客户端在该文件的租约，
+   * 客户端还会启动一个LeaseRenewer定期更新租约，以防止租约过期
    */
   synchronized void renewLease(String holder) {
     renewLease(getLease(holder));
   }
+
+  /**
+   *1. 首先从sortedLease字段中先先移除这个租约
+   * 2. 更新这个租约的最后时间
+   * 3. 重新加入sortedLeases
+   * 因为sortLeases是一个以最后更新时间排序集合，所以每次更新租约后，sortLeases中的顺序也需要重新改变
+   */
+
   synchronized void renewLease(Lease lease) {
     if (lease != null) {
       sortedLeases.remove(lease);
@@ -249,9 +273,9 @@ public class LeaseManager {
    * expire, all the corresponding locks can be released.
    *************************************************************/
   class Lease {
-    private final String holder;
-    private long lastUpdate;
-    private final HashSet<Long> files = new HashSet<>();
+    private final String holder;  //保存租约持有者的信息
+    private long lastUpdate;     //租约的最后更新时间
+    private final HashSet<Long> files = new HashSet<>();  //保存文件的Inode
   
     /** Only LeaseManager object can create a lease */
     private Lease(String holder) {
