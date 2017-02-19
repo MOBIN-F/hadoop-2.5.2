@@ -3114,7 +3114,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     BlockInfo curBlock = null;
     for(nrCompleteBlocks = 0; nrCompleteBlocks < nrBlocks; nrCompleteBlocks++) {
       curBlock = blocks[nrCompleteBlocks];
-      if(!curBlock.isComplete())  //判断文件所在数据块状态
+      if(!curBlock.isComplete())  //判断该文件的写入操作是否已经结束,状态为COMPLETE
         break;
       assert blockManager.hasMinStorage(curBlock) :
               "A COMPLETE block is not minimally replicated in " + src;
@@ -3125,7 +3125,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     //如果文件拥有的所有的数据块都处于complete状态，则直接关闭文件，释放租约
     if(nrCompleteBlocks == nrBlocks) {
       finalizeINodeFileUnderConstruction(src, pendingFile,
-          iip.getLatestSnapshotId(), false);
+          iip.getLatestSnapshotId(), false);     //删除租约，关闭文件
       NameNode.stateChangeLog.warn("BLOCK*" +
           " internalReleaseLease: All existing blocks are COMPLETE," +
           " lease removed, file " + src + " closed.");
@@ -3134,6 +3134,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     // Only the last and the penultimate blocks may be in non COMPLETE state.
     // If the penultimate block is not COMPLETE, then it must be COMMITTED.
+    /**
+     * 文件的所有数据块中，只有最后一个数据块以及倒数第二个数据块可能不为complete，且其状态只能commited
+     */
     if(nrCompleteBlocks < nrBlocks - 2 ||
        nrCompleteBlocks == nrBlocks - 2 &&
          curBlock != null &&
@@ -3142,14 +3145,18 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         + "attempt to release a create lock on "
         + src + " but file is already closed.";
       NameNode.stateChangeLog.warn(message);
+      //如果最后一个数据块既不处于COMMITTED状态也不处于CIOMPLETE状态则直接抛出异常
       throw new IOException(message);
     }
 
     // The last block is not COMPLETE, and
     // that the penultimate block if exists is either COMPLETE or COMMITTED
-    final BlockInfo lastBlock = pendingFile.getLastBlock();
-    BlockUCState lastBlockState = lastBlock.getBlockUCState();
-    BlockInfo penultimateBlock = pendingFile.getPenultimateBlock();
+    /**
+     * 当最后一个数据块的状态不为COMPLTET时，其倒数第二个数据块的状态可以为COMPLETE或COMMITTED
+     */
+    final BlockInfo lastBlock = pendingFile.getLastBlock();   //获取最后一个数据块
+    BlockUCState lastBlockState = lastBlock.getBlockUCState();   //最后个数据块的状态
+    BlockInfo penultimateBlock = pendingFile.getPenultimateBlock();   //获取倒数第二个数据块的状态
 
     // If penultimate block doesn't exist then its minReplication is met
     boolean penultimateBlockMinStorage = penultimateBlock == null ||
@@ -3161,10 +3168,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       break;
     case COMMITTED:
       // Close file if committed blocks are minimally replicated
+      //如果最后一个数据块的状态为COMMITTED且最小副本数大于1则可以关闭文件
       if(penultimateBlockMinStorage &&
           blockManager.hasMinStorage(lastBlock)) {
         finalizeINodeFileUnderConstruction(src, pendingFile,
-            iip.getLatestSnapshotId(), false);
+            iip.getLatestSnapshotId(), false);   //删除租约，关闭文件
         NameNode.stateChangeLog.warn("BLOCK*" +
             " internalReleaseLease: Committed blocks are minimally" +
             " replicated, lease removed, file" + src + " closed.");
