@@ -3107,14 +3107,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     assert hasWriteLock();
 
     final INodeFile pendingFile = iip.getLastINode().asFile();
-    int nrBlocks = pendingFile.numBlocks();
-    BlockInfo[] blocks = pendingFile.getBlocks();
+    int nrBlocks = pendingFile.numBlocks();            //文件拥有的数据块的个数
+    BlockInfo[] blocks = pendingFile.getBlocks();   //文件所在的数据块
 
     int nrCompleteBlocks;
     BlockInfo curBlock = null;
     for(nrCompleteBlocks = 0; nrCompleteBlocks < nrBlocks; nrCompleteBlocks++) {
       curBlock = blocks[nrCompleteBlocks];
-      if(!curBlock.isComplete())
+      if(!curBlock.isComplete())  //判断文件所在数据块状态
         break;
       assert blockManager.hasMinStorage(curBlock) :
               "A COMPLETE block is not minimally replicated in " + src;
@@ -3122,6 +3122,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     // If there are no incomplete blocks associated with this file,
     // then reap lease immediately and close the file.
+    //如果文件拥有的所有的数据块都处于complete状态，则直接关闭文件，释放租约
     if(nrCompleteBlocks == nrBlocks) {
       finalizeINodeFileUnderConstruction(src, pendingFile,
           iip.getLatestSnapshotId(), false);
