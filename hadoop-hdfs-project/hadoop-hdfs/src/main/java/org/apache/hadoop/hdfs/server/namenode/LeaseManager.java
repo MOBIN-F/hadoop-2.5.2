@@ -169,11 +169,11 @@ public class LeaseManager {
     return lease;
   }
 
-  /*
+  /**
   * 1. Namenoce关闭构建中的HDFS文件时，会调用FSNamesystem.finalizeINodeFileUnderConstruction()方法将INode从构建状态转换成非构建状态，
   * 同时由于客户端已经完成了文件的写操作，所以需要从LeaseManager中删除该文件的租约
   * 2. 在进行目录树的删除操作时，对于已经打开的文件，如果客户端从文件系统目录树中移出该HDFS文件，则会调用removerLeaseWithPrefixPath
-  * */
+  */
   synchronized void removeLease(long inodeId) {
     final Lease lease = leasesById.get(inodeId);
     if (lease != null) {
@@ -247,7 +247,6 @@ public class LeaseManager {
    * 3. 重新加入sortedLeases
    * 因为sortLeases是一个以最后更新时间排序集合，所以每次更新租约后，sortLeases中的顺序也需要重新改变
    */
-
   synchronized void renewLease(Lease lease) {
     if (lease != null) {
       sortedLeases.remove(lease);
@@ -350,7 +349,7 @@ public class LeaseManager {
           fsnamesystem.writeLockInterruptibly();
           try {
             if (!fsnamesystem.isInSafeMode()) {
-              needSync = checkLeases();
+              needSync = checkLeases();   //检查租约
             }
           } finally {
             fsnamesystem.writeUnlock("leaseManager");
@@ -359,7 +358,7 @@ public class LeaseManager {
               fsnamesystem.getEditLog().logSync();
             }
           }
-  
+         //休眠2秒
           Thread.sleep(fsnamesystem.getLeaseRecheckIntervalMs());
         } catch(InterruptedException ie) {
           if (LOG.isDebugEnabled()) {
@@ -381,7 +380,7 @@ public class LeaseManager {
     assert fsnamesystem.hasWriteLock();
 
     long start = monotonicNow();
-
+    //遍历LeaseManager中的所有租约
     while(!sortedLeases.isEmpty() && sortedLeases.peek().expiredHardLimit()
       && !isMaxLockHoldToReleaseLease(start)) {
       Lease leaseToCheck = sortedLeases.peek();
@@ -404,6 +403,7 @@ public class LeaseManager {
           if (!p.startsWith("/")) {
             throw new IOException("Invalid path in the lease " + p);
           }
+          //进行租约恢复
           boolean completed = fsnamesystem.internalReleaseLease(
               leaseToCheck, p, iip,
               HdfsServerConstants.NAMENODE_LEASE_HOLDER);
@@ -422,7 +422,7 @@ public class LeaseManager {
         } catch (IOException e) {
           LOG.error("Cannot release the path " + p + " in the lease "
               + leaseToCheck, e);
-          removing.add(id);
+          removing.add(id);   //将异常的文件租约添加队列中
         }
         if (isMaxLockHoldToReleaseLease(start)) {
           LOG.debug("Breaking out of checkLeases after " +
@@ -431,6 +431,7 @@ public class LeaseManager {
         }
       }
 
+      //释放租约
       for(Long id : removing) {
         removeLease(leaseToCheck, id);
       }
