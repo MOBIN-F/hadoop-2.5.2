@@ -3222,6 +3222,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         return true;
       }
       // start recovery of the last block for this file
+      //如果最后一块数据块写入了数据，则调用initializeBlockRecovery进行租约恢复，并且更新租约的持有者为HDFS_Namenode
       long blockRecoveryId = nextGenerationStamp(
           blockManager.isLegacyBlock(lastBlock));
       lease = reassignLease(lease, src, recoveryLeaseHolder, pendingFile);
@@ -3230,6 +3231,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       } else if(truncateRecovery) {
         recoveryBlock.setGenerationStamp(blockRecoveryId);
       }
+      //租约恢复
       uc.initializeBlockRecovery(lastBlock, blockRecoveryId);
       leaseManager.renewLease(lease);
       // Cannot close file right now, since the last block requires recovery.
