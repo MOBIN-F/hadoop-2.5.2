@@ -225,7 +225,9 @@ public class BlockUnderConstructionFeature {
    * make it primary.
    */
   public void initializeBlockRecovery(BlockInfo blockInfo, long recoveryId) {
+    //将数据块状态更改为UNDER_RECOVERY
     setBlockUCState(BlockUCState.UNDER_RECOVERY);
+    //数据块恢复时间
     blockRecoveryId = recoveryId;
     if (replicas.length == 0) {
       NameNode.blockStateChangeLog.warn("BLOCK*" +
