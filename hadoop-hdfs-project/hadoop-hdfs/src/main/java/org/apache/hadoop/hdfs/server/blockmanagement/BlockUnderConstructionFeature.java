@@ -238,6 +238,7 @@ public class BlockUnderConstructionFeature {
       return;
     }
     boolean allLiveReplicasTriedAsPrimary = true;
+    //遍历所有副本所在的Datanode，选取最近一次进行汇报的DataNode作为主恢复节点
     for (ReplicaUnderConstruction replica : replicas) {
       // Check if all replicas have been tried or not.
       if (replica.isAlive()) {
